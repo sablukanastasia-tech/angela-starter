@@ -51,7 +51,7 @@ WEEKLY_REVIEW_DOW: str = os.getenv("WEEKLY_REVIEW_DOW", "sun")  # день об�
 ENABLE_CYCLE: bool = _flag("ENABLE_CYCLE")              # docs/03-add-cycle.md
 ENABLE_GMAIL: bool = _flag("ENABLE_GMAIL")              # docs/04-add-gmail.md
 ENABLE_GCAL: bool = _flag("ENABLE_GCAL")                # docs/05-add-calendar.md
-ENABLE_REMINDERS: bool = _flag("ENABLE_REMINDERS")     # docs/06-add-reminders.md
+ENABLE_REMINDERS: bool = _flag("ENABLE_REMINDERS", "true")  # вкл по умолчанию; docs/06-add-reminders.md
 ENABLE_WEEKLY_REVIEW: bool = _flag("ENABLE_WEEKLY_REVIEW")  # docs/06-add-reminders.md
 
 # ── Ключи для опциональных интеграций ────────────────────────────────
