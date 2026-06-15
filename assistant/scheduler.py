@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Функцию отправки в Telegram задаёт __main__ после старта бота.
 _send = None
+_checkin_lock = asyncio.Lock()
 
 
 def set_sender(fn) -> None:
@@ -33,10 +34,11 @@ async def _do_checkin(checkin_prompt: str, label: str) -> None:
     """Провести один плановый чекин (если ещё не присылали сегодня)."""
     if not _send:
         return
-    today = datetime.now(config.TIMEZONE).strftime("%Y-%m-%d")
-    if db.was_checkin_sent(label, today):
-        logger.info("чекин '%s' уже был сегодня — пропускаю", label)
-        return
+    async with _checkin_lock:
+        today = datetime.now(config.TIMEZONE).strftime("%Y-%m-%d")
+        if db.was_checkin_sent(label, today):
+            logger.info("чекин '%s' уже был сегодня — пропускаю", label)
+            return
     for attempt in range(3):
         try:
             text = await ask(
