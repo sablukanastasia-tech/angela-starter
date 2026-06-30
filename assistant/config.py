@@ -53,9 +53,12 @@ ENABLE_GMAIL: bool = _flag("ENABLE_GMAIL")              # docs/04-add-gmail.md
 ENABLE_GCAL: bool = _flag("ENABLE_GCAL")                # docs/05-add-calendar.md
 ENABLE_REMINDERS: bool = _flag("ENABLE_REMINDERS", "true")  # вкл по умолчанию; docs/06-add-reminders.md
 ENABLE_WEEKLY_REVIEW: bool = _flag("ENABLE_WEEKLY_REVIEW")  # docs/06-add-reminders.md
+ENABLE_NOTION: bool = _flag("ENABLE_NOTION")                # сбор идей в Notion
 
 # ── Ключи для опциональных интеграций ────────────────────────────────
 OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")      # голосовые (Whisper)
+NOTION_TOKEN: str = os.getenv("NOTION_TOKEN", "")          # интеграция Notion
+NOTION_IDEAS_DB_ID: str = os.getenv("NOTION_IDEAS_DB_ID", "8c7af1e8-7d4d-48e2-a9c6-c9e3a5633dcb")
 GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")  # Gmail + Calendar
 GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
 # Куда Google вернёт пользователя после авторизации.

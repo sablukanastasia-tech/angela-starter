@@ -44,4 +44,10 @@ def build_runtime() -> tuple[list[dict], dict, str]:
         handlers.update(gcal.HANDLERS)
         addons.append(gcal.PROMPT_ADDON)
 
+    if config.ENABLE_NOTION:
+        from assistant.tools import notion
+        tools += notion.TOOLS
+        handlers.update(notion.HANDLERS)
+        addons.append(notion.PROMPT_ADDON)
+
     return tools, handlers, "\n\n".join(a for a in addons if a)
