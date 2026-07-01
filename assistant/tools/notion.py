@@ -24,10 +24,25 @@ _HEADERS = {
 }
 
 PROMPT_ADDON = """\
-МОДУЛЬ ИДЕЙ включён. если человек говорит «идея», «мысль», «хочу попробовать», \
-«запомни», «есть идея» — сохрани через save_idea, не переспрашивай лишнего. \
-ВСЕГДА после вызова save_idea напиши текстовый ответ — хотя бы «записала». \
-если просит показать идеи — вызови get_ideas и перечисли их коротко.
+МОДУЛЬ ИДЕЙ включён.
+
+если человек говорит «идея», «мысль», «хочу попробовать», «запомни», «есть идея» — \
+сохрани через save_idea (без лишних вопросов), затем ОБЯЗАТЕЛЬНО спроси о состоянии:
+
+«В каком состоянии записываешь?
+1. Мечтаю
+2. Планирую/сделаю
+3. Возбуждение
+4. Вдохновение
+5. Тревога
+6. Отчаяние
+7. Безнадега
+8. Хочу»
+
+когда человек ответит (цифрой или словом) — вызови set_idea_state с page_id из \
+предыдущего save_idea и соответствующим состоянием. коротко подтверди.
+
+если просит показать идеи — вызови get_ideas и перечисли коротко.
 """
 
 TOOLS = [
@@ -50,6 +65,24 @@ TOOLS = [
                 "notes": {"type": "string", "description": "Дополнительный контекст"},
             },
             "required": ["idea"],
+        },
+    },
+    {
+        "name": "set_idea_state",
+        "description": (
+            "Записать состояние к идее после того, как человек ответил на вопрос о состоянии. "
+            "page_id берётся из ответа save_idea."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "page_id": {"type": "string", "description": "ID страницы из save_idea"},
+                "state": {
+                    "type": "string",
+                    "description": "Одно из: Мечтаю, Планирую/сделаю, Возбуждение, Вдохновение, Тревога, Отчаяние, Безнадега, Хочу",
+                },
+            },
+            "required": ["page_id", "state"],
         },
     },
     {
@@ -92,7 +125,8 @@ def _save_idea(data: dict) -> dict:
         timeout=15,
     )
     resp.raise_for_status()
-    return {"saved": True, "idea": data["idea"]}
+    page_id = resp.json().get("id", "")
+    return {"saved": True, "idea": data["idea"], "page_id": page_id}
 
 
 def _get_ideas(data: dict) -> list[dict]:
@@ -135,7 +169,21 @@ def _get_ideas(data: dict) -> list[dict]:
     return ideas
 
 
+def _set_idea_state(data: dict) -> dict:
+    page_id = data["page_id"]
+    state = data["state"]
+    resp = httpx.patch(
+        f"{_BASE}/pages/{page_id}",
+        headers=_HEADERS,
+        json={"properties": {"Состояние": {"select": {"name": state}}}},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    return {"updated": True, "state": state}
+
+
 HANDLERS = {
     "save_idea": _save_idea,
+    "set_idea_state": _set_idea_state,
     "get_ideas": _get_ideas,
 }
