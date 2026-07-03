@@ -14,15 +14,17 @@ from assistant.google_auth import get_access_token
 
 logger = logging.getLogger(__name__)
 API = "https://www.googleapis.com/calendar/v3"
+TASKS_API = "https://tasks.googleapis.com/tasks/v1"
 
 PROMPT_ADDON = """\
-МОДУЛЬ КАЛЕНДАРЯ включён. ПРАВИЛО: любой вопрос про расписание, встречи, события, \
+МОДУЛЬ КАЛЕНДАРЯ включён. ПРАВИЛО: любой вопрос про расписание, встречи, события, задачи, \
 «что у меня», «что на сегодня/завтра/на неделе» — СНАЧАЛА вызови инструмент, потом отвечай. \
-Никогда не отвечай про календарь без вызова инструмента.
-— утренний чекин: вызови gcal_today, покажи встречи на сегодня (время + название).
-— «сегодня» / «что у меня» → gcal_today.
+Никогда не отвечай про календарь или задачи без вызова инструмента.
+— утренний чекин: вызови gcal_today и gtasks_upcoming, покажи встречи и задачи (✓) на сегодня.
+— «сегодня» / «что у меня» → gcal_today + gtasks_upcoming.
 — «завтра» / «ближайшие дни» / «на неделе» → gcal_upcoming с hours=48 (или больше).
 — «поставь встречу / добавь в календарь / создай» → gcal_create_event (время в ISO).
+— «задачи» / «дела» / «что с галочкой» → gtasks_upcoming.
 """
 
 TOOLS = [
@@ -54,6 +56,11 @@ TOOLS = [
             },
             "required": ["title", "start_time", "end_time"],
         },
+    },
+    {
+        "name": "gtasks_upcoming",
+        "description": "Задачи (с галочкой ✓) из Google Tasks — невыполненные, с ближайшим сроком.",
+        "input_schema": {"type": "object", "properties": {}},
     },
 ]
 
@@ -149,8 +156,49 @@ def _gcal_create_event(data: dict) -> dict:
         return {"error": str(exc)}
 
 
+def _list_tasklist_ids(token: str) -> list[str]:
+    """Вернуть ID всех списков задач на аккаунте."""
+    try:
+        resp = httpx.get(f"{TASKS_API}/users/@me/lists", headers={
+            "Authorization": f"Bearer {token}",
+        }, timeout=15)
+        resp.raise_for_status()
+        ids = [t["id"] for t in resp.json().get("items", [])]
+        return ids or ["@default"]
+    except Exception:
+        logger.exception("не смог получить списки задач, использую @default")
+        return ["@default"]
+
+
+def _gtasks_upcoming(data: dict):
+    token = get_access_token()
+    if not token:
+        return {"error": "Google не авторизован — открой /google/auth у бота"}
+    try:
+        all_items: list[dict] = []
+        for list_id in _list_tasklist_ids(token):
+            resp = httpx.get(f"{TASKS_API}/lists/{list_id}/tasks", headers={
+                "Authorization": f"Bearer {token}",
+            }, params={
+                "showCompleted": "false",
+                "showHidden": "false",
+            }, timeout=15)
+            resp.raise_for_status()
+            all_items.extend(resp.json().get("items", []))
+        all_items.sort(key=lambda t: t.get("due", "9999"))
+        return [{
+            "title": t.get("title", "(без названия)"),
+            "due": t.get("due", ""),
+            "notes": t.get("notes", ""),
+        } for t in all_items]
+    except Exception as exc:
+        logger.exception("ошибка Tasks")
+        return {"error": str(exc)}
+
+
 HANDLERS = {
     "gcal_today": _gcal_today,
     "gcal_upcoming": _gcal_upcoming,
     "gcal_create_event": _gcal_create_event,
+    "gtasks_upcoming": _gtasks_upcoming,
 }

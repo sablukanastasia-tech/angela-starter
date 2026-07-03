@@ -24,6 +24,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 # Какие права просим — зависит от включённых модулей.
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GCAL_SCOPE = "https://www.googleapis.com/auth/calendar"
+GTASKS_SCOPE = "https://www.googleapis.com/auth/tasks.readonly"
 
 
 def _scopes() -> list[str]:
@@ -32,6 +33,7 @@ def _scopes() -> list[str]:
         scopes.append(GMAIL_SCOPE)
     if config.ENABLE_GCAL:
         scopes.append(GCAL_SCOPE)
+        scopes.append(GTASKS_SCOPE)
     return scopes
 
 
