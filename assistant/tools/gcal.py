@@ -57,6 +57,21 @@ TOOLS = [
 ]
 
 
+def _list_calendar_ids(token: str) -> list[str]:
+    """Вернуть ID всех календарей, подключённых к аккаунту."""
+    try:
+        resp = httpx.get(f"{API}/users/me/calendarList", headers={
+            "Authorization": f"Bearer {token}",
+        }, timeout=15)
+        resp.raise_for_status()
+        ids = [c["id"] for c in resp.json().get("items", [])]
+        logger.info("gcal календари: %s", ids)
+        return ids or ["primary"]
+    except Exception:
+        logger.exception("не смог получить список календарей, использую primary")
+        return ["primary"]
+
+
 def _events_between(start: datetime, end: datetime) -> list[dict] | dict:
     token = get_access_token()
     if not token:
@@ -65,25 +80,31 @@ def _events_between(start: datetime, end: datetime) -> list[dict] | dict:
         time_min = start.isoformat()
         time_max = end.isoformat()
         logger.info("gcal запрос: %s → %s", time_min, time_max)
-        resp = httpx.get(f"{API}/calendars/primary/events", headers={
-            "Authorization": f"Bearer {token}",
-        }, params={
-            "timeMin": time_min,
-            "timeMax": time_max,
-            "singleEvents": "true",
-            "orderBy": "startTime",
-        }, timeout=15)
-        resp.raise_for_status()
-        data = resp.json()
-        items = data.get("items", [])
-        logger.info("gcal вернул %d событий (nextPageToken=%s)", len(items), data.get("nextPageToken"))
-        for e in items:
-            logger.info("  событие: %s | %s", e.get("summary"), e.get("start"))
+        cal_ids = _list_calendar_ids(token)
+        all_items: list[dict] = []
+        for cal_id in cal_ids:
+            resp = httpx.get(f"{API}/calendars/{cal_id}/events", headers={
+                "Authorization": f"Bearer {token}",
+            }, params={
+                "timeMin": time_min,
+                "timeMax": time_max,
+                "singleEvents": "true",
+                "orderBy": "startTime",
+            }, timeout=15)
+            resp.raise_for_status()
+            items = resp.json().get("items", [])
+            logger.info("  [%s] вернул %d событий", cal_id, len(items))
+            for e in items:
+                logger.info("    событие: %s | %s", e.get("summary"), e.get("start"))
+            all_items.extend(items)
+        all_items.sort(key=lambda e: (
+            e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", "")
+        ))
         return [{
             "title": e.get("summary", "(без названия)"),
             "start": e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", ""),
             "location": e.get("location", ""),
-        } for e in items]
+        } for e in all_items]
     except Exception as exc:
         logger.exception("ошибка Calendar")
         return {"error": str(exc)}
