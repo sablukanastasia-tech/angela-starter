@@ -6,6 +6,7 @@
 
 import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 import httpx
 
@@ -91,16 +92,20 @@ def _events_between(start: datetime, end: datetime) -> list[dict] | dict:
         cal_ids = _list_calendar_ids(token)
         all_items: list[dict] = []
         for cal_id in cal_ids:
-            resp = httpx.get(f"{API}/calendars/{cal_id}/events", headers={
-                "Authorization": f"Bearer {token}",
-            }, params={
-                "timeMin": time_min,
-                "timeMax": time_max,
-                "singleEvents": "true",
-                "orderBy": "startTime",
-            }, timeout=15)
-            resp.raise_for_status()
-            items = resp.json().get("items", [])
+            try:
+                resp = httpx.get(f"{API}/calendars/{quote(cal_id, safe='')}/events", headers={
+                    "Authorization": f"Bearer {token}",
+                }, params={
+                    "timeMin": time_min,
+                    "timeMax": time_max,
+                    "singleEvents": "true",
+                    "orderBy": "startTime",
+                }, timeout=15)
+                resp.raise_for_status()
+                items = resp.json().get("items", [])
+            except Exception:
+                logger.exception("gcal: пропускаю календарь %s (ошибка запроса)", cal_id)
+                continue
             logger.info("  [%s] вернул %d событий", cal_id, len(items))
             for e in items:
                 logger.info("    событие: %s | %s", e.get("summary"), e.get("start"))
@@ -177,14 +182,18 @@ def _gtasks_upcoming(data: dict):
     try:
         all_items: list[dict] = []
         for list_id in _list_tasklist_ids(token):
-            resp = httpx.get(f"{TASKS_API}/lists/{list_id}/tasks", headers={
-                "Authorization": f"Bearer {token}",
-            }, params={
-                "showCompleted": "false",
-                "showHidden": "false",
-            }, timeout=15)
-            resp.raise_for_status()
-            all_items.extend(resp.json().get("items", []))
+            try:
+                resp = httpx.get(f"{TASKS_API}/lists/{quote(list_id, safe='')}/tasks", headers={
+                    "Authorization": f"Bearer {token}",
+                }, params={
+                    "showCompleted": "false",
+                    "showHidden": "false",
+                }, timeout=15)
+                resp.raise_for_status()
+                all_items.extend(resp.json().get("items", []))
+            except Exception:
+                logger.exception("gtasks: пропускаю список %s (ошибка запроса)", list_id)
+                continue
         all_items.sort(key=lambda t: t.get("due", "9999"))
         return [{
             "title": t.get("title", "(без названия)"),
