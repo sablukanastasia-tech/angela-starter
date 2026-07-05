@@ -60,7 +60,11 @@ TOOLS = [
     },
     {
         "name": "gtasks_upcoming",
-        "description": "Задачи (с галочкой ✓) из Google Tasks — невыполненные, с ближайшим сроком.",
+        "description": (
+            "Задачи (с галочкой ✓) из Google Tasks — невыполненные. "
+            "У задачи есть только ДАТА (due_date, YYYY-MM-DD), без времени — "
+            "не придумывай час, говори про день ('на сегодня', 'просрочена вчера')."
+        ),
         "input_schema": {"type": "object", "properties": {}},
     },
 ]
@@ -195,9 +199,13 @@ def _gtasks_upcoming(data: dict):
                 logger.exception("gtasks: пропускаю список %s (ошибка запроса)", list_id)
                 continue
         all_items.sort(key=lambda t: t.get("due", "9999"))
+        for t in all_items:
+            logger.info("    задача: %s | сырой due: %s", t.get("title"), t.get("due"))
+        # У задач Google Tasks есть только ДАТА (время всегда 00:00 UTC — фикция).
+        # Отдаём боту только дату (YYYY-MM-DD), без выдуманного часа и без съезда суток.
         return [{
             "title": t.get("title", "(без названия)"),
-            "due": t.get("due", ""),
+            "due_date": (t.get("due") or "")[:10],
             "notes": t.get("notes", ""),
         } for t in all_items]
     except Exception as exc:
