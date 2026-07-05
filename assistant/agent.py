@@ -67,8 +67,6 @@ def _system_blocks(module_addons: str, extra_system: str) -> list[dict]:
         static += "\n\n" + module_addons
 
     now = datetime.now(TIMEZONE)
-    logger.info("системное 'сейчас' для модели: %s (пояс=%s)",
-                now.strftime("%Y-%m-%d %H:%M %z"), TIMEZONE)
     volatile = (
         f"сейчас: {now.strftime('%Y-%m-%d %H:%M')}, {now.strftime('%A')}\n"
         f"СЕГОДНЯ={now.strftime('%Y-%m-%d')}\n"
