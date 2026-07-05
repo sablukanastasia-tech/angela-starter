@@ -12,3 +12,4 @@ venv/
 credentials.json
 secrets/
 .DS_Store
+PROJECT_NOTES.local.md
