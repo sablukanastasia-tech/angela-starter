@@ -16,6 +16,9 @@ from assistant.google_auth import get_access_token
 logger = logging.getLogger(__name__)
 API = "https://www.googleapis.com/calendar/v3"
 TASKS_API = "https://tasks.googleapis.com/tasks/v1"
+# Спец-календарь дней рождения (берутся из Google Контактов). В calendarList
+# не приходит — обращаемся по фиксированному ID.
+BIRTHDAYS_CAL = "addressbook#contacts@group.v.calendar.google.com"
 
 PROMPT_ADDON = """\
 МОДУЛЬ КАЛЕНДАРЯ включён. ПРАВИЛО: любой вопрос про расписание, встречи, события, задачи, \
@@ -27,6 +30,7 @@ PROMPT_ADDON = """\
 — «поставь встречу / добавь в календарь / создай» → gcal_create_event (время в ISO).
 — «задачи» / «дела» / «что с галочкой» → gtasks_upcoming.
 — «добавь задачу / запиши дело / надо не забыть сделать X» → gtasks_create (только дата, без времени).
+— «дни рождения» / «у кого скоро др» → gcal_birthdays.
 """
 
 TOOLS = [
@@ -69,6 +73,17 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "gcal_birthdays",
+        "description": (
+            "Ближайшие дни рождения 🎂 (из Google Контактов). "
+            "По умолчанию на 90 дней вперёд. Даты без времени — только день."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {"days": {"type": "integer", "default": 90}},
+        },
+    },
+    {
         "name": "gtasks_create",
         "description": (
             "Создать задачу (с галочкой ✓) в Google Tasks. "
@@ -96,6 +111,8 @@ def _list_calendar_ids(token: str) -> list[str]:
         }, timeout=15)
         resp.raise_for_status()
         ids = [c["id"] for c in resp.json().get("items", [])]
+        if BIRTHDAYS_CAL not in ids:
+            ids.append(BIRTHDAYS_CAL)  # дни рождения 🎂 — чтобы попадали в «сегодня/ближайшие»
         logger.info("gcal календари: %s", ids)
         return ids or ["primary"]
     except Exception:
@@ -154,6 +171,32 @@ def _gcal_today(data: dict):
 def _gcal_upcoming(data: dict):
     now = datetime.now(TIMEZONE)
     return _events_between(now, now + timedelta(hours=data.get("hours", 24)))
+
+
+def _gcal_birthdays(data: dict):
+    token = get_access_token()
+    if not token:
+        return {"error": "Google не авторизован — открой /google/auth у бота"}
+    now = datetime.now(TIMEZONE)
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=data.get("days", 90))
+    try:
+        resp = httpx.get(f"{API}/calendars/{quote(BIRTHDAYS_CAL, safe='')}/events", headers={
+            "Authorization": f"Bearer {token}",
+        }, params={
+            "timeMin": start.isoformat(),
+            "timeMax": end.isoformat(),
+            "singleEvents": "true",
+            "orderBy": "startTime",
+        }, timeout=15)
+        resp.raise_for_status()
+        return [{
+            "date": e.get("start", {}).get("date", ""),
+            "title": e.get("summary", "(без названия)"),
+        } for e in resp.json().get("items", [])]
+    except Exception as exc:
+        logger.exception("ошибка календаря дней рождения")
+        return {"error": str(exc)}
 
 
 def _gcal_create_event(data: dict) -> dict:
@@ -262,6 +305,7 @@ HANDLERS = {
     "gcal_today": _gcal_today,
     "gcal_upcoming": _gcal_upcoming,
     "gcal_create_event": _gcal_create_event,
+    "gcal_birthdays": _gcal_birthdays,
     "gtasks_upcoming": _gtasks_upcoming,
     "gtasks_create": _gtasks_create,
 }
