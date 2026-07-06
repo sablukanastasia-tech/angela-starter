@@ -26,6 +26,7 @@ PROMPT_ADDON = """\
 — «завтра» / «ближайшие дни» / «на неделе» → gcal_upcoming с hours=48 (или больше).
 — «поставь встречу / добавь в календарь / создай» → gcal_create_event (время в ISO).
 — «задачи» / «дела» / «что с галочкой» → gtasks_upcoming.
+— «добавь задачу / запиши дело / надо не забыть сделать X» → gtasks_create (только дата, без времени).
 """
 
 TOOLS = [
@@ -66,6 +67,23 @@ TOOLS = [
             "не придумывай час, говори про день ('на сегодня', 'просрочена вчера')."
         ),
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "gtasks_create",
+        "description": (
+            "Создать задачу (с галочкой ✓) в Google Tasks. "
+            "У задачи только ДАТА (YYYY-MM-DD), время указать нельзя — "
+            "если человек называет время, предложи событие календаря (gcal_create_event)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Название задачи"},
+                "due_date": {"type": "string", "description": "Срок YYYY-MM-DD (можно без срока)"},
+                "notes": {"type": "string", "description": "Заметка к задаче"},
+            },
+            "required": ["title"],
+        },
     },
 ]
 
@@ -213,9 +231,37 @@ def _gtasks_upcoming(data: dict):
         return {"error": str(exc)}
 
 
+def _gtasks_create(data: dict) -> dict:
+    token = get_access_token()
+    if not token:
+        return {"error": "Google не авторизован — открой /google/auth у бота"}
+    body: dict = {"title": data["title"]}
+    if data.get("notes"):
+        body["notes"] = data["notes"]
+    if data.get("due_date"):
+        # API принимает due только как RFC3339-момент; время игнорируется,
+        # значима лишь дата — поэтому полночь UTC.
+        body["due"] = f"{data['due_date']}T00:00:00.000Z"
+    try:
+        resp = httpx.post(f"{TASKS_API}/lists/@default/tasks", headers={
+            "Authorization": f"Bearer {token}",
+        }, json=body, timeout=15)
+        resp.raise_for_status()
+        t = resp.json()
+        return {
+            "created": True,
+            "title": t.get("title", ""),
+            "due_date": (t.get("due") or "")[:10],
+        }
+    except Exception as exc:
+        logger.exception("ошибка создания задачи")
+        return {"error": str(exc)}
+
+
 HANDLERS = {
     "gcal_today": _gcal_today,
     "gcal_upcoming": _gcal_upcoming,
     "gcal_create_event": _gcal_create_event,
     "gtasks_upcoming": _gtasks_upcoming,
+    "gtasks_create": _gtasks_create,
 }

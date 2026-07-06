@@ -24,7 +24,7 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 # Какие права просим — зависит от включённых модулей.
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
 GCAL_SCOPE = "https://www.googleapis.com/auth/calendar"
-GTASKS_SCOPE = "https://www.googleapis.com/auth/tasks.readonly"
+GTASKS_SCOPE = "https://www.googleapis.com/auth/tasks"  # чтение + создание задач
 
 
 def _scopes() -> list[str]:
