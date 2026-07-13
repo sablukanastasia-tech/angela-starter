@@ -103,6 +103,19 @@ TOOLS = [
 ]
 
 
+def _localtime(dt_str: str) -> str:
+    """Конвертировать ISO datetime в локальное время (TIMEZONE). All-day даты оставлять как есть."""
+    if not dt_str or "T" not in dt_str:
+        return dt_str
+    try:
+        dt = datetime.fromisoformat(dt_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(TIMEZONE).strftime("%Y-%m-%dT%H:%M")
+    except Exception:
+        return dt_str
+
+
 def _list_calendar_ids(token: str) -> list[str]:
     """Вернуть ID всех календарей, подключённых к аккаунту."""
     try:
@@ -154,7 +167,9 @@ def _events_between(start: datetime, end: datetime) -> list[dict] | dict:
         ))
         return [{
             "title": e.get("summary", "(без названия)"),
-            "start": e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", ""),
+            "start": _localtime(
+                e.get("start", {}).get("dateTime") or e.get("start", {}).get("date", "")
+            ),
             "location": e.get("location", ""),
         } for e in all_items]
     except Exception as exc:
