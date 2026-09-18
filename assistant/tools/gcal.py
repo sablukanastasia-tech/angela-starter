@@ -30,6 +30,8 @@ PROMPT_ADDON = """\
 — «поставь встречу / добавь в календарь / создай» → gcal_create_event (время в ISO).
 — «задачи» / «дела» / «что с галочкой» → gtasks_upcoming.
 — «добавь задачу / запиши дело / надо не забыть сделать X» → gtasks_create (только дата, без времени).
+— «сделала / готово / выполнено / закрой задачу X» → сначала вызови gtasks_upcoming чтобы найти task_id, \
+затем gtasks_complete. Не выдумывай task_id — он должен прийти из gtasks_upcoming.
 — «дни рождения» / «у кого скоро др» → gcal_birthdays.
 """
 
@@ -98,6 +100,22 @@ TOOLS = [
                 "notes": {"type": "string", "description": "Заметка к задаче"},
             },
             "required": ["title"],
+        },
+    },
+    {
+        "name": "gtasks_complete",
+        "description": (
+            "Отметить задачу выполненной (закрыть галочкой ✓). "
+            "task_id и list_id берутся из ответа gtasks_upcoming — никогда не выдумывай их. "
+            "Если task_id неизвестен — сначала вызови gtasks_upcoming, найди задачу, потом закрой."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {"type": "string", "description": "ID задачи из gtasks_upcoming"},
+                "list_id": {"type": "string", "description": "ID списка из gtasks_upcoming"},
+            },
+            "required": ["task_id", "list_id"],
         },
     },
 ]
@@ -270,7 +288,10 @@ def _gtasks_upcoming(data: dict):
                     "showHidden": "false",
                 }, timeout=15)
                 resp.raise_for_status()
-                all_items.extend(resp.json().get("items", []))
+                items = resp.json().get("items", [])
+                for item in items:
+                    item["_list_id"] = list_id
+                all_items.extend(items)
             except Exception:
                 logger.exception("gtasks: пропускаю список %s (ошибка запроса)", list_id)
                 continue
@@ -280,6 +301,8 @@ def _gtasks_upcoming(data: dict):
         # У задач Google Tasks есть только ДАТА (время всегда 00:00 UTC — фикция).
         # Отдаём боту только дату (YYYY-MM-DD), без выдуманного часа и без съезда суток.
         return [{
+            "id": t.get("id", ""),
+            "list_id": t.get("_list_id", "@default"),
             "title": t.get("title", "(без названия)"),
             "due_date": (t.get("due") or "")[:10],
             "notes": t.get("notes", ""),
@@ -316,6 +339,26 @@ def _gtasks_create(data: dict) -> dict:
         return {"error": str(exc)}
 
 
+def _gtasks_complete(data: dict) -> dict:
+    token = get_access_token()
+    if not token:
+        return {"error": "Google не авторизован — открой /google/auth у бота"}
+    task_id = data["task_id"]
+    list_id = data.get("list_id", "@default")
+    try:
+        resp = httpx.patch(
+            f"{TASKS_API}/lists/{quote(list_id, safe='')}/tasks/{quote(task_id, safe='')}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"status": "completed"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return {"completed": True, "title": resp.json().get("title", "")}
+    except Exception as exc:
+        logger.exception("ошибка завершения задачи")
+        return {"error": str(exc)}
+
+
 HANDLERS = {
     "gcal_today": _gcal_today,
     "gcal_upcoming": _gcal_upcoming,
@@ -323,4 +366,5 @@ HANDLERS = {
     "gcal_birthdays": _gcal_birthdays,
     "gtasks_upcoming": _gtasks_upcoming,
     "gtasks_create": _gtasks_create,
+    "gtasks_complete": _gtasks_complete,
 }
